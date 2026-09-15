@@ -72,7 +72,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:label="FakeUptime">
                   <meta-data android:name="xposedmodule" android:value="true" />
-                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h)" />
+                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h) Ultimate" />
                   <meta-data android:name="xposedminversion" android:value="82" />
               </application>
           </manifest>
@@ -84,6 +84,7 @@ jobs:
           import de.robv.android.xposed.XC_MethodHook;
           import de.robv.android.xposed.XposedHelpers;
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
+          import android.os.SystemClock;
           
           public class HookInit implements IXposedHookLoadPackage {
               // 1000時間加算（秒）
@@ -93,27 +94,46 @@ jobs:
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
                   if (!"com.android.settings".equals(lpparam.packageName)) return;
                   
-                  // 設定アプリが秒数を文字に変換する関数をフックする
+                  XC_MethodHook hook = new XC_MethodHook() {
+                      @Override
+                      protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                          // 引数が1つの場合と2つの場合両方に対応
+                          int argIndex = (param.args.length == 1) ? 0 : 1;
+                          long seconds = (long) param.args[argIndex];
+                          
+                          // 実際のシステムの稼働時間(秒)を取得
+                          long actualUptime = SystemClock.elapsedRealtime() / 1000;
+                          
+                          // 表示しようとしている秒数が、実際の稼働時間とほぼ同じ（誤差10秒以内）なら
+                          // アプリ側のクラス名が暗号化されていても「稼働時間の表示処理だ」と断定して水増しする
+                          if (Math.abs(seconds - actualUptime) < 10) {
+                              param.args[argIndex] = seconds + OFFSET_SECONDS;
+                          }
+                      }
+                  };
+                  
+                  // DateUtils.formatElapsedTime(long)
                   XposedHelpers.findAndHookMethod(
                       "android.text.format.DateUtils",
                       lpparam.classLoader,
                       "formatElapsedTime",
                       long.class,
-                      new XC_MethodHook() {
-                          @Override
-                          protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                              // 他の画面の時間を狂わせないよう、稼働時間(Uptime)画面からの呼び出しのみを狙う
-                              StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-                              for (StackTraceElement element : stackTrace) {
-                                  if (element.getClassName().contains("UptimePreferenceController")) {
-                                      long seconds = (long) param.args[0];
-                                      param.args[0] = seconds + OFFSET_SECONDS; // 1000時間をこっそり足す
-                                      break;
-                                  }
-                              }
-                          }
-                      }
+                      hook
                   );
+                  
+                  // DateUtils.formatElapsedTime(StringBuilder, long)
+                  try {
+                      XposedHelpers.findAndHookMethod(
+                          "android.text.format.DateUtils",
+                          lpparam.classLoader,
+                          "formatElapsedTime",
+                          StringBuilder.class,
+                          long.class,
+                          hook
+                      );
+                  } catch (Throwable t) {
+                      // メソッドが存在しないバージョンの場合は無視
+                  }
               }
           }
           EOF
