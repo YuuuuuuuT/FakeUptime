@@ -86,22 +86,31 @@ jobs:
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
           
           public class HookInit implements IXposedHookLoadPackage {
-              // 1000時間加算（ミリ秒）
-              private static final long OFFSET_MS = 1000L * 60 * 60 * 1000;
+              // 1000時間加算（秒）
+              private static final long OFFSET_SECONDS = 1000L * 60 * 60;
               
               @Override
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
                   if (!"com.android.settings".equals(lpparam.packageName)) return;
                   
+                  // 設定アプリが秒数を文字に変換する関数をフックする
                   XposedHelpers.findAndHookMethod(
-                      "android.os.SystemClock",
+                      "android.text.format.DateUtils",
                       lpparam.classLoader,
-                      "elapsedRealtime",
+                      "formatElapsedTime",
+                      long.class,
                       new XC_MethodHook() {
                           @Override
-                          protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                              long original = (long) param.getResult();
-                              param.setResult(original + OFFSET_MS);
+                          protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                              // 他の画面の時間を狂わせないよう、稼働時間(Uptime)画面からの呼び出しのみを狙う
+                              StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+                              for (StackTraceElement element : stackTrace) {
+                                  if (element.getClassName().contains("UptimePreferenceController")) {
+                                      long seconds = (long) param.args[0];
+                                      param.args[0] = seconds + OFFSET_SECONDS; // 1000時間をこっそり足す
+                                      break;
+                                  }
+                              }
                           }
                       }
                   );
