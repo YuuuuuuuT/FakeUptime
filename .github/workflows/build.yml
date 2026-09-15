@@ -4,15 +4,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Setup Project
+        uses: android-actions/setup-android@v2
+
+      - name: Install Gradle
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip -q gradle-8.2-bin.zip
+          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
+
+      - name: Create Project Files
         run: |
           mkdir -p app/src/main/java/com/example/fakeuptime
           mkdir -p app/src/main/assets
@@ -23,7 +30,7 @@ jobs:
           EOF
           cat << 'EOF' > build.gradle
           plugins {
-              id 'com.android.application' version '8.2.2' apply false
+              id 'com.android.application' version '8.1.4' apply false
           }
           EOF
           cat << 'EOF' > app/build.gradle
@@ -32,16 +39,17 @@ jobs:
           }
           android {
               namespace 'com.example.fakeuptime'
-              compileSdk 34
+              compileSdk 33
               defaultConfig {
                   applicationId "com.example.fakeuptime"
                   minSdk 26
-                  targetSdk 34
+                  targetSdk 33
                   versionCode 1
                   versionName "1.0"
               }
           }
           repositories {
+              google()
               mavenCentral()
           }
           dependencies {
@@ -65,7 +73,6 @@ jobs:
           import de.robv.android.xposed.XposedHelpers;
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
           public class HookInit implements IXposedHookLoadPackage {
-              // 500時間（ミリ秒）
               private static final long OFFSET_MS = 500L * 60 * 60 * 1000;
               @Override
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
@@ -85,10 +92,12 @@ jobs:
               }
           }
           EOF
-      - name: Build with Gradle
+
+      - name: Build APK
         run: gradle assembleDebug
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
