@@ -20,7 +20,18 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/example/fakeuptime
           mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/values
           echo "com.example.fakeuptime.HookInit" > app/src/main/assets/xposed_init
+          
+          # 自動チェックを入れる設定ファイル
+          cat << 'EOF' > app/src/main/res/values/arrays.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string-array name="xposedscope">
+                  <item>com.android.settings</item>
+              </string-array>
+          </resources>
+          EOF
           
           cat << 'EOF' > settings.gradle
           pluginManagement {
@@ -72,8 +83,9 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:label="FakeUptime">
                   <meta-data android:name="xposedmodule" android:value="true" />
-                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h) DebugLog" />
+                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h) AutoScope" />
                   <meta-data android:name="xposedminversion" android:value="82" />
+                  <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
               </application>
           </manifest>
           EOF
@@ -95,31 +107,23 @@ jobs:
                   
                   XposedBridge.log("FakeUptime: Target app (Settings) loaded successfully!");
                   
-                  // アプローチ1
                   try {
                       XposedHelpers.findAndHookMethod("android.text.format.DateUtils", lpparam.classLoader, "formatElapsedTime", long.class, new XC_MethodHook() {
                           @Override protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                              XposedBridge.log("FakeUptime: Hook 1 (1 argument) triggered!");
+                              XposedBridge.log("FakeUptime: Hook 1 triggered!");
                               param.args[0] = (long) param.args[0] + OFFSET_SECONDS;
                           }
                       });
-                      XposedBridge.log("FakeUptime: Hook 1 installed.");
-                  } catch (Throwable t) {
-                      XposedBridge.log("FakeUptime: Hook 1 failed to install: " + t.getMessage());
-                  }
+                  } catch (Throwable t) {}
                   
-                  // アプローチ2
                   try {
                       XposedHelpers.findAndHookMethod("android.text.format.DateUtils", lpparam.classLoader, "formatElapsedTime", StringBuilder.class, long.class, new XC_MethodHook() {
                           @Override protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                              XposedBridge.log("FakeUptime: Hook 2 (2 arguments) triggered!");
+                              XposedBridge.log("FakeUptime: Hook 2 triggered!");
                               param.args[1] = (long) param.args[1] + OFFSET_SECONDS;
                           }
                       });
-                      XposedBridge.log("FakeUptime: Hook 2 installed.");
-                  } catch (Throwable t) {
-                      XposedBridge.log("FakeUptime: Hook 2 failed to install: " + t.getMessage());
-                  }
+                  } catch (Throwable t) {}
               }
           }
           EOF
