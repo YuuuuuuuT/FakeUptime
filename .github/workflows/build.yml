@@ -1,0 +1,94 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Setup Project
+        run: |
+          mkdir -p app/src/main/java/com/example/fakeuptime
+          mkdir -p app/src/main/assets
+          echo "com.example.fakeuptime.HookInit" > app/src/main/assets/xposed_init
+          cat << 'EOF' > settings.gradle
+          rootProject.name = "FakeUptime"
+          include ':app'
+          EOF
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.example.fakeuptime'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.example.fakeuptime"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+          }
+          repositories {
+              mavenCentral()
+          }
+          dependencies {
+              compileOnly 'de.robv.android.xposed:api:82'
+          }
+          EOF
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="FakeUptime">
+                  <meta-data android:name="xposedmodule" android:value="true" />
+                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime" />
+                  <meta-data android:name="xposedminversion" android:value="82" />
+              </application>
+          </manifest>
+          EOF
+          cat << 'EOF' > app/src/main/java/com/example/fakeuptime/HookInit.java
+          package com.example.fakeuptime;
+          import de.robv.android.xposed.IXposedHookLoadPackage;
+          import de.robv.android.xposed.XC_MethodHook;
+          import de.robv.android.xposed.XposedHelpers;
+          import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
+          public class HookInit implements IXposedHookLoadPackage {
+              // 500時間（ミリ秒）
+              private static final long OFFSET_MS = 500L * 60 * 60 * 1000;
+              @Override
+              public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
+                  if (!"com.android.settings".equals(lpparam.packageName)) return;
+                  XposedHelpers.findAndHookMethod(
+                      "android.os.SystemClock",
+                      lpparam.classLoader,
+                      "elapsedRealtime",
+                      new XC_MethodHook() {
+                          @Override
+                          protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                              long original = (long) param.getResult();
+                              param.setResult(original + OFFSET_MS);
+                          }
+                      }
+                  );
+              }
+          }
+          EOF
+      - name: Build with Gradle
+        run: gradle assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
