@@ -72,7 +72,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:label="FakeUptime">
                   <meta-data android:name="xposedmodule" android:value="true" />
-                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h) Ultimate" />
+                  <meta-data android:name="xposeddescription" android:value="Spoof System Uptime (+1000h) BruteForce" />
                   <meta-data android:name="xposedminversion" android:value="82" />
               </application>
           </manifest>
@@ -84,56 +84,42 @@ jobs:
           import de.robv.android.xposed.XC_MethodHook;
           import de.robv.android.xposed.XposedHelpers;
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
-          import android.os.SystemClock;
           
           public class HookInit implements IXposedHookLoadPackage {
-              // 1000時間加算（秒）
+              // 1000時間分
               private static final long OFFSET_SECONDS = 1000L * 60 * 60;
               
               @Override
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
                   if (!"com.android.settings".equals(lpparam.packageName)) return;
                   
-                  XC_MethodHook hook = new XC_MethodHook() {
-                      @Override
-                      protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                          // 引数が1つの場合と2つの場合両方に対応
-                          int argIndex = (param.args.length == 1) ? 0 : 1;
-                          long seconds = (long) param.args[argIndex];
-                          
-                          // 実際のシステムの稼働時間(秒)を取得
-                          long actualUptime = SystemClock.elapsedRealtime() / 1000;
-                          
-                          // 表示しようとしている秒数が、実際の稼働時間とほぼ同じ（誤差10秒以内）なら
-                          // アプリ側のクラス名が暗号化されていても「稼働時間の表示処理だ」と断定して水増しする
-                          if (Math.abs(seconds - actualUptime) < 10) {
-                              param.args[argIndex] = seconds + OFFSET_SECONDS;
-                          }
-                      }
-                  };
-                  
-                  // DateUtils.formatElapsedTime(long)
-                  XposedHelpers.findAndHookMethod(
-                      "android.text.format.DateUtils",
-                      lpparam.classLoader,
-                      "formatElapsedTime",
-                      long.class,
-                      hook
-                  );
-                  
-                  // DateUtils.formatElapsedTime(StringBuilder, long)
+                  // アプローチ1: 標準の DateUtils を無条件フック（1引数版）
                   try {
-                      XposedHelpers.findAndHookMethod(
-                          "android.text.format.DateUtils",
-                          lpparam.classLoader,
-                          "formatElapsedTime",
-                          StringBuilder.class,
-                          long.class,
-                          hook
-                      );
-                  } catch (Throwable t) {
-                      // メソッドが存在しないバージョンの場合は無視
-                  }
+                      XposedHelpers.findAndHookMethod("android.text.format.DateUtils", lpparam.classLoader, "formatElapsedTime", long.class, new XC_MethodHook() {
+                          @Override protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                              param.args[0] = (long) param.args[0] + OFFSET_SECONDS;
+                          }
+                      });
+                  } catch (Throwable t) {}
+                  
+                  // アプローチ2: 標準の DateUtils を無条件フック（2引数版）
+                  try {
+                      XposedHelpers.findAndHookMethod("android.text.format.DateUtils", lpparam.classLoader, "formatElapsedTime", StringBuilder.class, long.class, new XC_MethodHook() {
+                          @Override protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                              param.args[1] = (long) param.args[1] + OFFSET_SECONDS;
+                          }
+                      });
+                  } catch (Throwable t) {}
+                  
+                  // アプローチ3: SettingsLib 独自の StringUtil を無条件フック (Pixel等で使われる可能性)
+                  try {
+                      XposedHelpers.findAndHookMethod("com.android.settingslib.utils.StringUtil", lpparam.classLoader, "formatElapsedTime", 
+                          android.content.Context.class, double.class, boolean.class, boolean.class, new XC_MethodHook() {
+                          @Override protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                              param.args[1] = (double) param.args[1] + (OFFSET_SECONDS * 1000.0);
+                          }
+                      });
+                  } catch (Throwable t) {}
               }
           }
           EOF
