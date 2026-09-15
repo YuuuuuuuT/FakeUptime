@@ -5,13 +5,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
 
       - name: Install Gradle
         run: |
@@ -73,6 +70,7 @@ jobs:
           import de.robv.android.xposed.XposedHelpers;
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
           public class HookInit implements IXposedHookLoadPackage {
+              // 500時間（ミリ秒）
               private static final long OFFSET_MS = 500L * 60 * 60 * 1000;
               @Override
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
@@ -97,7 +95,7 @@ jobs:
         run: gradle assembleDebug
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
