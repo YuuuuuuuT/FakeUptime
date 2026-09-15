@@ -22,6 +22,19 @@ jobs:
           mkdir -p app/src/main/assets
           echo "com.example.fakeuptime.HookInit" > app/src/main/assets/xposed_init
           cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
           rootProject.name = "FakeUptime"
           include ':app'
           EOF
@@ -45,10 +58,6 @@ jobs:
                   versionName "1.0"
               }
           }
-          repositories {
-              google()
-              mavenCentral()
-          }
           dependencies {
               compileOnly 'de.robv.android.xposed:api:82'
           }
@@ -70,7 +79,7 @@ jobs:
           import de.robv.android.xposed.XposedHelpers;
           import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
           public class HookInit implements IXposedHookLoadPackage {
-              // 500時間（ミリ秒）
+              // 500時間加算（ミリ秒）
               private static final long OFFSET_MS = 500L * 60 * 60 * 1000;
               @Override
               public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
